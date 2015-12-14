@@ -7,6 +7,7 @@
          parser-tools/lex
          (prefix-in : parser-tools/lex-sre))
 
+(provide calc)
 ;; -------------------
 ;; Zero Page Locations
 ;; -------------------
@@ -255,6 +256,3 @@
   (display ".end")
   (newline)
   )
-
-;; Some examples
-(calc (open-input-string "a=1\nb=1234\na + (b - 20)"))

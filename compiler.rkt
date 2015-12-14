@@ -1,10 +1,16 @@
 #lang racket
+(require "cminus.rkt")
+(provide my-compile)
+
 (define (compile-file source object)
   (with-output-to-file object	
     (lambda () (compile (open-input-file source)))    
     #:exists 'replace)
   )
 
-(define (compile source)
-  (displayln "compiling...")
+(define (my-compile source eval)
+  (displayln "Compiling source...")
+  (calc source)
   )
+
+(current-compile my-compile)
