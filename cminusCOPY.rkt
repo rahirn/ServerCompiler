@@ -48,7 +48,7 @@
 (define SUBTRACT #xF00E)
 
 (define-tokens value-tokens (NUM VAR FNCT))
-(define-empty-tokens op-tokens (newline = OP CP OB CB + - * / ^ EOF NEG WHILE > < >= <= == !=))
+(define-empty-tokens op-tokens (newline = OP CP OB CB + - * / ^ EOF NEG IF ELSE WHILE > < >= <= == !=))
 
 ;; A hash table to store variable values in for the calculator
 (define vars (make-hash))
@@ -80,6 +80,7 @@
    ["}" 'CB]
    ["sin" (token-FNCT sin)]
    ["if" 'IF]
+   ["else" 'ELSE]
    ["while" 'WHILE]
    [(:+ (:or lower-letter upper-letter)) (token-VAR (string->symbol lexeme))]
    [(:+ digit) (token-NUM (string->number lexeme))]
@@ -103,14 +104,14 @@
            ;; and try to start over right after the error
            [(error start) $2]
            [(exp) $1])    
-    (exp [(NUM) (begin
-                  (define ret "")
-                    (let-values ([(lo hi hexLo hexHi) (int->16bit $1)])
-                      ;; Assembly Code
-                      ;; Push number onto stack
-                      (set! ret (format "LDA #$~a~nPHA~nLDA #$~a~nPHA~n" hexHi hexLo))
+    (exp [(NUM) (let-values ([(lo hi hexLo hexHi) (int->16bit $1)])
+                  ;; Assembly Code
+                  ;; Push number onto stack
+                  (printf "LDA #$~a~n" hexHi)
+                  (printf "PHA~n")
+                  (printf "LDA #$~a~n" hexLo)
+                  (printf "PHA~n")
                   $1)
-                    ret)
                 ]
          [(VAR) (begin
                   ;; Assembly Code
@@ -197,12 +198,12 @@
          
          [(WHILE OP exp CP OB exp CB) (begin
                               (printf "label~a:\n" lblCounter)
-                              (printf "~a\n" $3)                              
-                              (printf "BEQ 4\n")
+                              ;;(printf "~a\n" $3)
+                              (printf "BEQ 3\n")
                               (printf "JMP end~a\n" lblCounter)
-                              (printf $6)
+                              ;;(printf $6)
                               (printf "JMP label~a\n" lblCounter)
-                              (printf "end~a:" lblCounter)
+                              (printf "end~a:\n" lblCounter)
                               (set! lblCounter (+ lblCounter 1)))]
          [(exp == exp) (begin
                         (printf "EQUAL\n"))]
