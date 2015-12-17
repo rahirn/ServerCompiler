@@ -9,6 +9,8 @@
          parser-tools/lex
          (prefix-in : parser-tools/lex-sre))
 
+(provide make)
+
 ;; -------------------
 ;; Zero Page Locations
 ;; -------------------
@@ -74,7 +76,7 @@
 
 ;; Tokens
 (define-tokens value-tokens (NUM VAR-ID FNCT))
-(define-empty-tokens op-tokens (= + - * / SEMICOLON COMMA OB CB OP CP EQUIVALENCE NOTEQUALS WHILE INT VOID EOF NEG))
+(define-empty-tokens op-tokens (= + - * / SEMICOLON COMMA OB CB OP CP EQUIVALENCE NOTEQUALS LESSTHAN GREATERTHAN LESSEQUALS GREATEREQUALS WHILE IF ELSE INT VOID EOF NEG))
 
 ;; LEXER SHORTHAND
 (define-lex-abbrevs
@@ -95,9 +97,15 @@
    [(:or "=" "+" "-" "*" "/") (string->symbol lexeme)]
    ["void" 'VOID]
    ["int" 'INT]
+   ["if" 'IF]
+   ["else" 'ELSE]
    ["while" 'WHILE]
    ["==" 'EQUIVALENCE]
    ["!=" 'NOTEQUALS]
+   ["<" 'LESSTHAN]
+   [">" 'GREATERTHAN]
+   ["<=" 'LESSEQUALS]
+   [">=" 'GREATEREQUALS]
    ["," 'COMMA]
    [";" 'SEMICOLON]
    ["(" 'OP]
@@ -177,6 +185,7 @@
     (STATEMENT
      [(EXPRESSION-STMT) $1]
      [(COMPOUND-STMT) $1]
+     [(SELECTION-STMT) $1]
      [(ITERATION-STMT) $1]
      )    
     
@@ -184,7 +193,24 @@
      [(EXPRESSION SEMICOLON) (string-append $1 (format-code 2 "68 68 "))]
      [(SEMICOLON) ""]) 
     
-
+   
+    (SELECTION-STMT 
+     ;;if
+     [(IF OP EXPRESSION CP STATEMENT)
+      (let-values ([(lo hi hexLo hexHi) (int->16bit (- program-counter (/ (string-length $5) 3) (/ (string-length $3) 3)))])
+        (string-append
+         $3
+         (format-code 6 "68 85 ~a 68 85 ~a " (8bit->hex WORK1LO) (8bit->hex WORK1HI));
+         (format-code 2 "A5 ~a " (8bit->hex WORK1LO)) ;lda worklo 
+         (format-code 2 "D0 05 ") ;beq to start of stmt
+         (format-code 2 "A5 ~a " (8bit->hex WORK1HI)) ;lda workhi
+         (let-values ([(lo hi hexLo hexHi) (int->16bit (+ program-counter 3))])
+           (format-code 3 "4C ~a ~a " hexLo hexHi) ;jmp past stmt
+           )
+         $5)
+        )
+      ]
+     )
     
     (ITERATION-STMT
      ;; While Loops
@@ -311,6 +337,64 @@
            (format-code 1 "48 ") ;pha
            )
          ]
+         [(equal? $2 'LESSTHAN)
+         (string-append $1 $3
+                        ;; Assembly Code
+                        ;; Pull Right-hand expression off Stack
+                        (format-code 6 "68 85 ~a 68 85 ~a " 
+                                     (8bit->hex MATH2LO)
+                                     (8bit->hex MATH2HI))
+                        ;; Pull Left-hand expression off Stack
+                        (format-code 6 "68 85 ~a 68 85 ~a " 
+                                     (8bit->hex MATH1LO)
+                                     (8bit->hex MATH1HI))
+                        (format-code 2 "A9 00 ") ;lda 0
+                        (format-code 1 "48 ") ;pha
+                        (format-code 2 "A5 ~a " (8bit->hex MATH1LO));lda math1o
+                        (format-code 2 "C5 ~a " (8bit->hex MATH2LO));cmp math2lo
+                        (format-code 2 "B0 0A ") ;bcs true
+                        (format-code 2 "A5 ~a " (8bit->hex MATH1HI)) ;lda math1hi
+                        (format-code 2 "C5 ~a " (8bit->hex MATH2HI)) ;cmp math2hi
+                        (format-code 1 "08 ") ;php
+                        (format-code 2 "A9 01 ") ;lda 01
+                        (format-code 1 "28 ") ;plp
+                        (format-code 2 "F0 02 ") ;beq done
+                        ;false
+                        (format-code 2 "A9 00 ") ;lda 0
+                        ;; Push answer onto Stack
+                        ;done:
+                        (format-code 1 "48 ") ;pha
+                        )
+         ]
+         [(equal? $2 'GREATERTHAN)
+         (string-append $1 $3
+                        ;; Assembly Code
+                        ;; Pull Right-hand expression off Stack
+                        (format-code 6 "68 85 ~a 68 85 ~a " 
+                                     (8bit->hex MATH2LO)
+                                     (8bit->hex MATH2HI))
+                        ;; Pull Left-hand expression off Stack
+                        (format-code 6 "68 85 ~a 68 85 ~a " 
+                                     (8bit->hex MATH1LO)
+                                     (8bit->hex MATH1HI))
+                        (format-code 2 "A9 00 ") ;lda 0
+                        (format-code 1 "48 ") ;pha
+                        (format-code 2 "A5 ~a " (8bit->hex MATH1LO));lda math1o
+                        (format-code 2 "C5 ~a " (8bit->hex MATH2LO));cmp math2lo
+                        (format-code 2 "90 0A ") ;bcc true
+                        (format-code 2 "A5 ~a " (8bit->hex MATH1HI)) ;lda math1hi
+                        (format-code 2 "C5 ~a " (8bit->hex MATH2HI)) ;cmp math2hi
+                        (format-code 1 "08 ") ;php
+                        (format-code 2 "A9 01 ") ;lda 01
+                        (format-code 1 "28 ") ;plp
+                        (format-code 2 "F0 02 ") ;beq done
+                        ;false
+                        (format-code 2 "A9 00 ") ;lda 0
+                        ;; Push answer onto Stack
+                        ;done:
+                        (format-code 1 "48 ") ;pha
+                        )
+         ]
         )                                            
       ]
      
@@ -318,7 +402,11 @@
     
     (RELOP
      [(EQUIVALENCE) 'EQUIVALENCE] ;; ==
-     [(NOTEQUALS) 'NOTEQUALS]) ;; !=
+     [(NOTEQUALS) 'NOTEQUALS] ;; ==
+     [(LESSTHAN) 'LESSTHAN] ;; ==
+     [(GREATERTHAN) 'GREATERTHAN] ;; ==
+     [(LESSEQUALS) 'LESSEQUALS] ;; ==
+     [(GREATEREQUALS) 'GREATEREQUALS]) ;; !=
     
     (ADDITIVE-EXPRESSION
      [(ADDITIVE-EXPRESSION ADDOP TERM) 
@@ -518,6 +606,8 @@
 
 ;; run the calculator on the given input-port       
 (define (make ip)
+  (define p (open-output-string))
+  (current-output-port p)
   (printf "D000") ;; NOT LITTLE-ENDIAN!!!!!
   (newline)
   (letrec ((one-seq
@@ -531,14 +621,19 @@
   (newline)
   ;  (display ".end")
   (display "FFFFFF") ;; Hex 02
-  (let-values ([(lo hi hexLo hexHi) (int->16bit ENTRYPOINT)])
-    ;; Assembly Code
-    ;; jump to the address of the subroutine
-    (printf "~n~a~a~nFFFFFF" hexHi hexLo) ;; <==== byte reversal!!!
-    )
-  ;  (newline)
+  (get-output-string p)
   )
 
 ;; quick test
-;(make (open-input-string "int x; void main(){x=1;while(x!=16){output(x);x=x*2;}\noutput(x);}"))
-(make (open-input-string "int x; void main(){x=16;output(x);x=x/2;output(x);}"))
+;(make (open-input-string "
+;int x;
+;void main(){
+;  x=1;
+;  if(x > 10){
+;    output(1);
+;  }
+;  while(x < 10){
+;    output(x);
+;    x=x+1;
+;  }
+;}"))

@@ -9,8 +9,7 @@
   )
 
 (define (my-compile source eval)
-  (displayln "Compiling source...")
-  (calc source)
+  (make source)
   )
 
 (current-compile my-compile)
