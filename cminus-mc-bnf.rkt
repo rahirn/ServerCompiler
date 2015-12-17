@@ -74,7 +74,7 @@
 
 ;; Tokens
 (define-tokens value-tokens (NUM VAR-ID FNCT))
-(define-empty-tokens op-tokens (= + - * / SEMICOLON COMMA OB CB OP CP EQUIVALENCE NOTEQUALS WHILE INT VOID EOF NEG))
+(define-empty-tokens op-tokens (= + - * / G L GE LE SEMICOLON COMMA OB CB OP CP EQUIVALENCE NOTEQUALS IF ELSE WHILE INT VOID EOF NEG))
 
 ;; LEXER SHORTHAND
 (define-lex-abbrevs
@@ -95,9 +95,15 @@
    [(:or "=" "+" "-" "*" "/") (string->symbol lexeme)]
    ["void" 'VOID]
    ["int" 'INT]
+   ["if" 'IF]
+   ["else" 'ELSE]
    ["while" 'WHILE]
    ["==" 'EQUIVALENCE]
    ["!=" 'NOTEQUALS]
+   ["<" L]
+   [">" G]
+   ["<=" LE]
+   [">=" GE]
    ["," 'COMMA]
    [";" 'SEMICOLON]
    ["(" 'OP]
@@ -177,6 +183,7 @@
     (STATEMENT
      [(EXPRESSION-STMT) $1]
      [(COMPOUND-STMT) $1]
+     [(SELECTION-STMT) $1]
      [(ITERATION-STMT) $1]
      )    
     
@@ -184,7 +191,24 @@
      [(EXPRESSION SEMICOLON) (string-append $1 (format-code 2 "68 68 "))]
      [(SEMICOLON) ""]) 
     
-
+    (SELECTION-STMT 
+     ;;if
+     [(IF OP EXPRESSION CP STATEMENT)
+      (let-values ([(lo hi hexLo hexHi) (int->16bit (- program-counter (/ (string-length $5) 3) (/ (string-length $3) 3)))])
+        (string-append
+         $3
+         (format-code 6 "68 85 ~a 68 85 ~a " (8bit->hex WORK1LO) (8bit->hex WORK1HI));
+         (format-code 2 "A5 ~a " (8bit->hex WORK1LO)) ;lda worklo 
+         (format-code 2 "D0 05 ") ;beq to start of stmt
+         (format-code 2 "A5 ~a " (8bit->hex WORK1HI)) ;lda workhi
+         (let-values ([(lo hi hexLo hexHi) (int->16bit (+ program-counter 3))])
+           (format-code 3 "4C ~a ~a " hexLo hexHi) ;jmp past stmt
+           )
+         $5)
+        )
+      ]
+     )
+                                                       
     
     (ITERATION-STMT
      ;; While Loops
@@ -318,7 +342,12 @@
     
     (RELOP
      [(EQUIVALENCE) 'EQUIVALENCE] ;; ==
-     [(NOTEQUALS) 'NOTEQUALS]) ;; !=
+     [(NOTEQUALS) 'NOTEQUALS] ;; !=
+     [(G) 'G]
+     [(L) 'L]
+     [(GE) 'GE]
+     [(LE) 'LE])
+    
     
     (ADDITIVE-EXPRESSION
      [(ADDITIVE-EXPRESSION ADDOP TERM) 
@@ -500,13 +529,24 @@
   (newline)
   ;  (display ".end")
   (display "FFFFFF") ;; Hex 02
-  (let-values ([(lo hi hexLo hexHi) (int->16bit ENTRYPOINT)])
+  ;(let-values ([(lo hi hexLo hexHi) (int->16bit ENTRYPOINT)])
     ;; Assembly Code
     ;; jump to the address of the subroutine
-    (printf "~n~a~a~nFFFFFF" hexHi hexLo) ;; <==== byte reversal!!!
-    )
+    ;(printf "~n~a~a~nFFFFFF" hexHi hexLo) ;; <==== byte reversal!!!
+    
+    ;)
   ;  (newline)
   )
 
 ;; quick test
-(make (open-input-string "int x; void main(){x=1;while(x!=16){output(x);x=x*2;}\noutput(x);}"))
+(make (open-input-string "
+int x;
+void main(){
+  x=3;
+  if(x==2){
+    output(1);
+  } 
+  if(x!=2) {
+    output(0);
+  }
+}"))
